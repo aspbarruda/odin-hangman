@@ -2,20 +2,30 @@
 
 require 'yaml'
 
+# creating pool of words
+module AvailableWords
+  file = File.read 'google-10000-english-no-swears.txt'
+  file = file.split("\n")
+
+  WORDS = file.select { |value| value if value.length > 4 && value.length < 13 }
+end
+
 # class for each game
 class Game
   attr_accessor :guess_number, :used_letters, :answer, :secret_word
 
-  @@file = File.read 'google-10000-english-no-swears.txt'
-  @@file = @@file.split("\n")
+  include AvailableWords
 
-  @@possible_words = @@file.select { |value| value if value.length > 4 && value.length < 13 }
-
-  def initialize
-    @guess_number = 1
-    @used_letters = []
-    @secret_word = @@possible_words[rand(@@possible_words.length)]
-    @answer = Array.new(@secret_word.length, '_')
+  def initialize(guess_number = 1, used_letters = [], secret_word = nil, answer = nil)
+    @guess_number = guess_number
+    @used_letters = used_letters
+    if secret_word.nil?
+      @secret_word = WORDS[rand(WORDS.length)]
+      @answer = Array.new(@secret_word.length, '_') if answer.nil?
+    else
+      @secret_word = secret_word
+      @answer = answer
+    end
   end
 
   def initial_printing
@@ -25,14 +35,15 @@ class Game
     print 'Used Letters: '
     @used_letters.sort.each { |value| print "#{value} " }
     puts "\n\n"
-    puts "Guess #{@guess_number} out of #{MAX_GUESSES}:\n"
+    puts "Guess #{@guess_number} out of #{MAX_GUESSES}: (press 1 at any time to save the game)\n"
   end
 
   def make_a_guess
-    while true
+    loop do
       @guess = gets.chomp.downcase
+      self.save if @guess == '1'
       unless check_validity(@guess, @used_letters)
-        puts "Enter a single letter only that hasn't been used:"
+        puts "Enter a single letter only that hasn't been used: (press 1 at any time to save the game)\n"
         next
       end
       break
@@ -40,7 +51,7 @@ class Game
     @used_letters.push @guess
   end
 
-  def compare()
+  def compare
     temp = []
     @answer.each_index { |i| temp[i] = @answer[i] }
     i = 0
@@ -56,6 +67,25 @@ class Game
 
     false
   end
+
+  def save
+    savefile_content = File.open('savefile.yml', 'w')
+    content = (YAML.dump({
+                          guess_number: @guess_number,
+                          used_letters: @used_letters,
+                          secret_word: @secret_word,
+                          answer: @answer
+                        }))
+    savefile_content.puts(content)
+    savefile_content.close
+  end
+
+  def self.load(savefile)
+    content = File.read savefile
+    data = YAML.load content
+    puts data
+    Game.new(data[:guess_number], data[:used_letters], data[:secret_word], data[:answer])
+  end
 end
 
 MAX_GUESSES = 7
@@ -64,13 +94,20 @@ game_running = true
 
 while game_running
   have_won = false
-  game = Game.new
+  puts 'Load a previously saved game? (y for load, any other key for start new game)'
+  choice = gets.chomp
+  if choice.downcase == 'y'
+    game = Game.load 'savefile.yml'
+  else
+    game = Game.new
+  end
 
   until have_won || game.guess_number > MAX_GUESSES
     system('clear')
-    game.initial_printing()
-    game.make_a_guess()
-    temp = game.compare()
+
+    game.initial_printing
+    game.make_a_guess
+    temp = game.compare
     unless temp.include? '_'
       have_won = true
       next
